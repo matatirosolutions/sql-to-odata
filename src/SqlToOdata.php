@@ -9,7 +9,7 @@ use PhpMyAdmin\SqlParser\Statements\SelectStatement;
 
 class SqlToOdata
 {
-    public function convert(string $sql): string
+    public function parse(string $sql): ParsedQuery
     {
         $parser = new Parser($sql);
         if (!empty($parser->errors)) {
@@ -22,7 +22,20 @@ class SqlToOdata
             throw new ConversionException('Only SELECT statements are supported.');
         }
 
-        return $this->buildOdataQuery($statement);
+        $table = $statement->from[0]->table ?? null;
+        if ($table === null || $table === '') {
+            throw new ConversionException('Could not determine entity set from SQL.');
+        }
+
+        return new ParsedQuery(
+            entitySet: trim($table, '`"\''),
+            queryString: $this->buildOdataQuery($statement),
+        );
+    }
+
+    public function convert(string $sql): string
+    {
+        return $this->parse($sql)->queryString;
     }
 
     private function buildOdataQuery(SelectStatement $statement): string
