@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Matatirosoln\SqlToOdata\Tests;
 
-use Matatirosoln\SqlToOdata\OdataFilterBuilder;
+use Matatirosoln\SqlToOdata\Support\OdataFilterBuilder;
 use PhpMyAdmin\SqlParser\Components\Condition;
 use PHPUnit\Framework\TestCase;
 

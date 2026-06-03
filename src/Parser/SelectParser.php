@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace Matatirosoln\SqlToOdata\Parser;
 
 use Matatirosoln\SqlToOdata\Exception\ConversionException;
-use Matatirosoln\SqlToOdata\OdataFilterBuilder;
+use Matatirosoln\SqlToOdata\Support\OdataFilterBuilder;
 use Matatirosoln\SqlToOdata\Query\SelectQuery;
 use PhpMyAdmin\SqlParser\Statements\SelectStatement;
 

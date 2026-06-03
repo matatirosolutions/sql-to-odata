@@ -5,7 +5,7 @@ namespace Matatirosoln\SqlToOdata\Parser;
 
 use Matatirosoln\SqlToOdata\Exception\ConversionException;
 use Matatirosoln\SqlToOdata\Query\InsertQuery;
-use Matatirosoln\SqlToOdata\ValueCaster;
+use Matatirosoln\SqlToOdata\Support\ValueCaster;
 use PhpMyAdmin\SqlParser\Statements\InsertStatement;
 
 class InsertParser

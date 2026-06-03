@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Matatirosoln\SqlToOdata;
+namespace Matatirosoln\SqlToOdata\Support;
 
 class ValueCaster
 {

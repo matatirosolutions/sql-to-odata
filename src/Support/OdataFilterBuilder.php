@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Matatirosoln\SqlToOdata;
+namespace Matatirosoln\SqlToOdata\Support;
 
 use PhpMyAdmin\SqlParser\Components\Condition;
 
