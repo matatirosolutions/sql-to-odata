@@ -17,6 +17,64 @@ class OdataFilterBuilder
         '='  => 'eq',
     ];
 
+    /**
+     * Given the index of an opening quote in $str, returns the index
+     * immediately after the matching closing quote.
+     */
+    private static function skipQuotedString(string $str, int $i): int
+    {
+        $quote = $str[$i++];
+        $len   = strlen($str);
+
+        while ($i < $len) {
+            if ($str[$i] === '\\') {
+                $i += 2;
+            } elseif ($str[$i] === $quote) {
+                if ($quote === "'" && isset($str[$i + 1]) && $str[$i + 1] === "'") {
+                    $i += 2; // SQL-style escaped quote: ''
+                } else {
+                    $i++;
+                    break;
+                }
+            } else {
+                $i++;
+            }
+        }
+
+        return $i;
+    }
+
+    /** @return string[] */
+    private static function splitInValues(string $list): array
+    {
+        $values  = [];
+        $current = '';
+        $len     = strlen($list);
+        $i       = 0;
+
+        while ($i < $len) {
+            $ch = $list[$i];
+            if ($ch === "'" || $ch === '"') {
+                $end     = self::skipQuotedString($list, $i);
+                $current .= substr($list, $i, $end - $i);
+                $i       = $end;
+            } elseif ($ch === ',') {
+                $values[] = trim($current);
+                $current  = '';
+                $i++;
+            } else {
+                $current .= $ch;
+                $i++;
+            }
+        }
+
+        if (trim($current) !== '') {
+            $values[] = trim($current);
+        }
+
+        return $values;
+    }
+
     /** @param Condition[] $conditions */
     public static function build(array $conditions): string
     {
@@ -35,27 +93,48 @@ class OdataFilterBuilder
 
     private static function convertCondition(string $expr): string
     {
+        if (preg_match('/^(.+?)\s+IS\s+NOT\s+NULL$/i', $expr, $m)) {
+            return trim($m[1]) . ' ne null';
+        }
+
+        if (preg_match('/^(.+?)\s+IS\s+NULL$/i', $expr, $m)) {
+            return trim($m[1]) . ' eq null';
+        }
+
+        if (preg_match("/^(.+?)\s+LIKE\s+'([^']*)'\s*$/i", $expr, $m)) {
+            $col     = trim($m[1]);
+            $pattern = $m[2];
+
+            $leadingPct  = str_starts_with($pattern, '%');
+            $trailingPct = str_ends_with($pattern, '%');
+            $value       = trim($pattern, '%');
+
+            if ($leadingPct && $trailingPct) {
+                return "contains($col, '$value')";
+            }
+            if ($trailingPct) {
+                return "startswith($col, '$value')";
+            }
+            if ($leadingPct) {
+                return "endswith($col, '$value')";
+            }
+
+            return "$col eq '$value'";
+        }
+
+        if (preg_match('/^(.+?)\s+IN\s*\((.+)\)\s*$/i', $expr, $m)) {
+            $col    = trim($m[1]);
+            $values = array_map('trim', self::splitInValues($m[2]));
+            $clauses = array_map(fn($v) => "$col eq $v", $values);
+            return '(' . implode(' or ', $clauses) . ')';
+        }
+
         $len = strlen($expr);
         $i = 0;
 
         while ($i < $len) {
-            // Skip over quoted string literals, handling '' and \' escapes
             if ($expr[$i] === "'" || $expr[$i] === '"') {
-                $quote = $expr[$i++];
-                while ($i < $len) {
-                    if ($expr[$i] === '\\') {
-                        $i += 2;
-                    } elseif ($expr[$i] === $quote) {
-                        if ($quote === "'" && isset($expr[$i + 1]) && $expr[$i + 1] === "'") {
-                            $i += 2; // SQL-style escaped quote: ''
-                        } else {
-                            $i++;
-                            break;
-                        }
-                    } else {
-                        $i++;
-                    }
-                }
+                $i = self::skipQuotedString($expr, $i);
                 continue;
             }
 

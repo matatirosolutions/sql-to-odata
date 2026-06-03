@@ -78,4 +78,74 @@ class OdataFilterBuilderTest extends TestCase
         $result = OdataFilterBuilder::build($conditions);
         $this->assertSame("Status eq 'Active' and Age gt 18", $result);
     }
+
+    // IS NULL / IS NOT NULL
+
+    public function testIsNull(): void
+    {
+        $conditions = [$this->makeCondition('DeletedAt IS NULL')];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame('DeletedAt eq null', $result);
+    }
+
+    public function testIsNotNull(): void
+    {
+        $conditions = [$this->makeCondition('DeletedAt IS NOT NULL')];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame('DeletedAt ne null', $result);
+    }
+
+    // LIKE
+
+    public function testLikeContains(): void
+    {
+        $conditions = [$this->makeCondition("Name LIKE '%foo%'")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("contains(Name, 'foo')", $result);
+    }
+
+    public function testLikeStartsWith(): void
+    {
+        $conditions = [$this->makeCondition("Name LIKE 'foo%'")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("startswith(Name, 'foo')", $result);
+    }
+
+    public function testLikeEndsWith(): void
+    {
+        $conditions = [$this->makeCondition("Name LIKE '%foo'")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("endswith(Name, 'foo')", $result);
+    }
+
+    public function testLikeExactMatch(): void
+    {
+        $conditions = [$this->makeCondition("Name LIKE 'foo'")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("Name eq 'foo'", $result);
+    }
+
+    // IN
+
+    public function testInWithStrings(): void
+    {
+        $conditions = [$this->makeCondition("Status IN ('Active', 'Pending')")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("(Status eq 'Active' or Status eq 'Pending')", $result);
+    }
+
+    public function testInWithIntegers(): void
+    {
+        $conditions = [$this->makeCondition('Age IN (18, 21, 65)')];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame('(Age eq 18 or Age eq 21 or Age eq 65)', $result);
+    }
+
+    public function testInWithCommaInsideValue(): void
+    {
+        // Comma inside a quoted string must not split the value
+        $conditions = [$this->makeCondition("Tag IN ('a,b', 'c')")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("(Tag eq 'a,b' or Tag eq 'c')", $result);
+    }
 }
