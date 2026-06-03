@@ -35,11 +35,40 @@ class OdataFilterBuilder
 
     private static function convertCondition(string $expr): string
     {
-        foreach (self::OPERATOR_MAP as $sql => $odata) {
-            if (str_contains($expr, $sql)) {
-                [$left, $right] = explode($sql, $expr, 2);
-                return trim($left) . ' ' . $odata . ' ' . trim($right);
+        $len = strlen($expr);
+        $i = 0;
+
+        while ($i < $len) {
+            // Skip over quoted string literals, handling '' and \' escapes
+            if ($expr[$i] === "'" || $expr[$i] === '"') {
+                $quote = $expr[$i++];
+                while ($i < $len) {
+                    if ($expr[$i] === '\\') {
+                        $i += 2;
+                    } elseif ($expr[$i] === $quote) {
+                        if ($quote === "'" && isset($expr[$i + 1]) && $expr[$i + 1] === "'") {
+                            $i += 2; // SQL-style escaped quote: ''
+                        } else {
+                            $i++;
+                            break;
+                        }
+                    } else {
+                        $i++;
+                    }
+                }
+                continue;
             }
+
+            // Try to match each operator at this unquoted position
+            foreach (self::OPERATOR_MAP as $sql => $odata) {
+                if (substr($expr, $i, strlen($sql)) === $sql) {
+                    $left = trim(substr($expr, 0, $i));
+                    $right = trim(substr($expr, $i + strlen($sql)));
+                    return $left . ' ' . $odata . ' ' . $right;
+                }
+            }
+
+            $i++;
         }
 
         return $expr;

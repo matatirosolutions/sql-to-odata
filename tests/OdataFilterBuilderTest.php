@@ -45,6 +45,29 @@ class OdataFilterBuilderTest extends TestCase
         $this->assertSame('Age le 65', $result);
     }
 
+    public function testOperatorInsideSingleQuotedValue(): void
+    {
+        // Old str_contains approach would match >= inside the string value
+        $conditions = [$this->makeCondition("Tag = 'price>=0'")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("Tag eq 'price>=0'", $result);
+    }
+
+    public function testOperatorInsideDoubleQuotedValue(): void
+    {
+        $conditions = [$this->makeCondition('Tag = "a<b"')];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame('Tag eq "a<b"', $result);
+    }
+
+    public function testSqlEscapedQuoteInValue(): void
+    {
+        // SQL-style escaped single quote: '' inside a string literal
+        $conditions = [$this->makeCondition("Name = 'O''Brien'")];
+        $result = OdataFilterBuilder::build($conditions);
+        $this->assertSame("Name eq 'O''Brien'", $result);
+    }
+
     public function testAndOperator(): void
     {
         $conditions = [
