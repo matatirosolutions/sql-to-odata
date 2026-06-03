@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Matatirosoln\SqlToOdata\Support;
 
+use Matatirosoln\SqlToOdata\Exception\ConversionException;
 use PhpMyAdmin\SqlParser\Components\Condition;
 
 class OdataFilterBuilder
@@ -175,6 +176,12 @@ class OdataFilterBuilder
             $leadingPct  = str_starts_with($pattern, '%');
             $trailingPct = str_ends_with($pattern, '%');
             $value       = trim($pattern, '%');
+
+            if (str_contains($value, '%') || str_contains($value, '_')) {
+                throw new ConversionException(
+                    "Unsupported LIKE pattern '$pattern': interior wildcards (% and _) have no OData equivalent."
+                );
+            }
 
             if ($leadingPct && $trailingPct) {
                 return "contains($col, '$value')";

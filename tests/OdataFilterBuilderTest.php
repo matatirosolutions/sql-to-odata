@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Matatirosoln\SqlToOdata\Tests;
 
+use Matatirosoln\SqlToOdata\Exception\ConversionException;
 use Matatirosoln\SqlToOdata\Support\OdataFilterBuilder;
 use PhpMyAdmin\SqlParser\Components\Condition;
 use PHPUnit\Framework\TestCase;
@@ -210,6 +211,20 @@ class OdataFilterBuilderTest extends TestCase
         $conditions = [$this->makeCondition("Name LIKE '%foo'")];
         $result = OdataFilterBuilder::build($conditions);
         $this->assertSame("endswith(Name, 'foo')", $result);
+    }
+
+    public function testLikeInteriorWildcardThrows(): void
+    {
+        $this->expectException(ConversionException::class);
+        $this->expectExceptionMessage('interior wildcards');
+        OdataFilterBuilder::build([$this->makeCondition("Name LIKE '%foo%bar%'")]);
+    }
+
+    public function testLikeSingleCharWildcardThrows(): void
+    {
+        $this->expectException(ConversionException::class);
+        $this->expectExceptionMessage('interior wildcards');
+        OdataFilterBuilder::build([$this->makeCondition("Name LIKE 'foo_bar'")]);
     }
 
     public function testLikeExactMatch(): void
