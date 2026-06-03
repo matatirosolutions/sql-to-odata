@@ -1,13 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Matatirosoln\SqlToOdata;
+namespace Matatirosoln\SqlToOdata\Query;
 
-final class ParsedQuery
+abstract class Query
 {
     public function __construct(
         public readonly string $entitySet,
-        public readonly string $queryString,
     ) {
     }
 }
