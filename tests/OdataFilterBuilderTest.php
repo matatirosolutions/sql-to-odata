@@ -79,6 +79,60 @@ class OdataFilterBuilderTest extends TestCase
         $this->assertSame("Status eq 'Active' and Age gt 18", $result);
     }
 
+    // AND/OR precedence
+
+    public function testPureAndNeedsNoParens(): void
+    {
+        $conditions = [
+            $this->makeCondition('a = 1'),
+            $this->makeCondition('and', true),
+            $this->makeCondition('b = 2'),
+            $this->makeCondition('and', true),
+            $this->makeCondition('c = 3'),
+        ];
+        $this->assertSame('a eq 1 and b eq 2 and c eq 3', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testPureOrNeedsNoParens(): void
+    {
+        $conditions = [
+            $this->makeCondition('a = 1'),
+            $this->makeCondition('or', true),
+            $this->makeCondition('b = 2'),
+            $this->makeCondition('or', true),
+            $this->makeCondition('c = 3'),
+        ];
+        $this->assertSame('a eq 1 or b eq 2 or c eq 3', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testAndGroupWrappedWhenOrPresent(): void
+    {
+        // SQL: a = 1 OR b = 2 AND c = 3  →  AND binds tighter
+        $conditions = [
+            $this->makeCondition('a = 1'),
+            $this->makeCondition('or', true),
+            $this->makeCondition('b = 2'),
+            $this->makeCondition('and', true),
+            $this->makeCondition('c = 3'),
+        ];
+        $this->assertSame('a eq 1 or (b eq 2 and c eq 3)', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testMultipleAndGroupsSeparatedByOr(): void
+    {
+        // SQL: a = 1 AND b = 2 OR c = 3 AND d = 4
+        $conditions = [
+            $this->makeCondition('a = 1'),
+            $this->makeCondition('and', true),
+            $this->makeCondition('b = 2'),
+            $this->makeCondition('or', true),
+            $this->makeCondition('c = 3'),
+            $this->makeCondition('and', true),
+            $this->makeCondition('d = 4'),
+        ];
+        $this->assertSame('(a eq 1 and b eq 2) or (c eq 3 and d eq 4)', OdataFilterBuilder::build($conditions));
+    }
+
     // IS NULL / IS NOT NULL
 
     public function testIsNull(): void

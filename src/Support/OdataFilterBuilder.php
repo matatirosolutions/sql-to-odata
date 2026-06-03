@@ -88,7 +88,48 @@ class OdataFilterBuilder
             }
         }
 
-        return implode(' ', $parts);
+        return self::applyBooleanPrecedence($parts);
+    }
+
+    /**
+     * Wraps AND-connected groups in parentheses when OR is also present,
+     * preserving SQL precedence (AND binds tighter than OR).
+     *
+     * @param string[] $parts Alternating expressions and 'and'/'or' operators.
+     */
+    private static function applyBooleanPrecedence(array $parts): string
+    {
+        $operators = array_filter($parts, fn($p) => $p === 'and' || $p === 'or');
+
+        $hasAnd = in_array('and', $operators, true);
+        $hasOr  = in_array('or',  $operators, true);
+
+        if (!$hasAnd || !$hasOr) {
+            return implode(' ', $parts);
+        }
+
+        // Split on 'or', collect AND-connected segments, parenthesise multi-expression ones
+        $orSegments  = [];
+        $currentSegment = [];
+
+        foreach ($parts as $part) {
+            if ($part === 'or') {
+                $orSegments[]   = $currentSegment;
+                $currentSegment = [];
+            } else {
+                $currentSegment[] = $part;
+            }
+        }
+        $orSegments[] = $currentSegment;
+
+        $clauses = array_map(function (array $segment): string {
+            $joined = implode(' ', $segment);
+            // More than one expression in this segment means it contains ANDs
+            $expressionCount = (count($segment) + 1) / 2;
+            return $expressionCount > 1 ? "($joined)" : $joined;
+        }, $orSegments);
+
+        return implode(' or ', $clauses);
     }
 
     private static function convertCondition(string $expr): string
