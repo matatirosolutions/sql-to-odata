@@ -132,6 +132,32 @@ class OdataFilterBuilder
         return implode(' or ', $clauses);
     }
 
+    private const string GUID_PATTERN     = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
+    private const string DATE_PATTERN     = '/^\d{4}-\d{2}-\d{2}$/';
+    private const string DATETIME_PATTERN = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/';
+
+    /**
+     * Unquotes date, datetime, and GUID literals for OData v4 filter syntax.
+     * Plain strings remain quoted; numeric/null literals are returned as-is.
+     */
+    private static function formatFilterValue(string $value): string
+    {
+        if ((str_starts_with($value, "'") && str_ends_with($value, "'"))
+            || (str_starts_with($value, '"') && str_ends_with($value, '"'))
+        ) {
+            $inner = substr($value, 1, -1);
+
+            if (preg_match(self::GUID_PATTERN, $inner)
+                || preg_match(self::DATE_PATTERN, $inner)
+                || preg_match(self::DATETIME_PATTERN, $inner)
+            ) {
+                return $inner;
+            }
+        }
+
+        return $value;
+    }
+
     private static function convertCondition(string $expr): string
     {
         if (preg_match('/^(.+?)\s+IS\s+NOT\s+NULL$/i', $expr, $m)) {
@@ -165,7 +191,7 @@ class OdataFilterBuilder
 
         if (preg_match('/^(.+?)\s+IN\s*\((.+)\)\s*$/i', $expr, $m)) {
             $col    = trim($m[1]);
-            $values = array_map('trim', self::splitInValues($m[2]));
+            $values  = array_map(fn($v) => self::formatFilterValue(trim($v)), self::splitInValues($m[2]));
             $clauses = array_map(fn($v) => "$col eq $v", $values);
             return '(' . implode(' or ', $clauses) . ')';
         }
@@ -182,8 +208,8 @@ class OdataFilterBuilder
             // Try to match each operator at this unquoted position
             foreach (self::OPERATOR_MAP as $sql => $odata) {
                 if (substr($expr, $i, strlen($sql)) === $sql) {
-                    $left = trim(substr($expr, 0, $i));
-                    $right = trim(substr($expr, $i + strlen($sql)));
+                    $left  = trim(substr($expr, 0, $i));
+                    $right = self::formatFilterValue(trim(substr($expr, $i + strlen($sql))));
                     return $left . ' ' . $odata . ' ' . $right;
                 }
             }

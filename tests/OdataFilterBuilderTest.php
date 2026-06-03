@@ -79,6 +79,46 @@ class OdataFilterBuilderTest extends TestCase
         $this->assertSame("Status eq 'Active' and Age gt 18", $result);
     }
 
+    // Date, datetime, and GUID filter values
+
+    public function testDateValueIsUnquoted(): void
+    {
+        $conditions = [$this->makeCondition("CreatedAt = '2024-01-15'")];
+        $this->assertSame('CreatedAt eq 2024-01-15', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testDatetimeValueIsUnquoted(): void
+    {
+        $conditions = [$this->makeCondition("CreatedAt = '2024-01-15T09:30:00Z'")];
+        $this->assertSame('CreatedAt eq 2024-01-15T09:30:00Z', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testDatetimeWithOffsetIsUnquoted(): void
+    {
+        $conditions = [$this->makeCondition("CreatedAt = '2024-01-15T09:30:00+12:00'")];
+        $this->assertSame('CreatedAt eq 2024-01-15T09:30:00+12:00', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testGuidValueIsUnquoted(): void
+    {
+        $conditions = [$this->makeCondition("Id = '12345678-1234-1234-1234-123456789abc'")];
+        $this->assertSame('Id eq 12345678-1234-1234-1234-123456789abc', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testPlainStringValueRemainsQuoted(): void
+    {
+        $conditions = [$this->makeCondition("Status = 'Active'")];
+        $this->assertSame("Status eq 'Active'", OdataFilterBuilder::build($conditions));
+    }
+
+    public function testGuidInInList(): void
+    {
+        $a = '11111111-1111-1111-1111-111111111111';
+        $b = '22222222-2222-2222-2222-222222222222';
+        $conditions = [$this->makeCondition("Id IN ('$a', '$b')")];
+        $this->assertSame("(Id eq $a or Id eq $b)", OdataFilterBuilder::build($conditions));
+    }
+
     // AND/OR precedence
 
     public function testPureAndNeedsNoParens(): void
