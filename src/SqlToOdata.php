@@ -4,12 +4,14 @@ declare(strict_types=1);
 namespace Matatirosoln\SqlToOdata;
 
 use Matatirosoln\SqlToOdata\Exception\ConversionException;
+use Matatirosoln\SqlToOdata\Parser\DeleteParser;
 use Matatirosoln\SqlToOdata\Parser\InsertParser;
 use Matatirosoln\SqlToOdata\Parser\SelectParser;
 use Matatirosoln\SqlToOdata\Parser\UpdateParser;
 use Matatirosoln\SqlToOdata\Query\Query;
 use Matatirosoln\SqlToOdata\Query\SelectQuery;
 use PhpMyAdmin\SqlParser\Parser;
+use PhpMyAdmin\SqlParser\Statements\DeleteStatement;
 use PhpMyAdmin\SqlParser\Statements\InsertStatement;
 use PhpMyAdmin\SqlParser\Statements\SelectStatement;
 use PhpMyAdmin\SqlParser\Statements\UpdateStatement;
@@ -29,7 +31,8 @@ class SqlToOdata
             $statement instanceof SelectStatement => new SelectParser()->parse($statement),
             $statement instanceof InsertStatement => new InsertParser()->parse($statement),
             $statement instanceof UpdateStatement => new UpdateParser()->parse($statement),
-            default => throw new ConversionException('Only SELECT, INSERT, and UPDATE statements are supported.'),
+            $statement instanceof DeleteStatement => new DeleteParser()->parse($statement),
+            default => throw new ConversionException('Only SELECT, INSERT, UPDATE, and DELETE statements are supported.'),
         };
     }
 
