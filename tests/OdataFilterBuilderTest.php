@@ -80,6 +80,38 @@ class OdataFilterBuilderTest extends TestCase
         $this->assertSame("Status eq 'Active' and Age gt 18", $result);
     }
 
+    // Backtick and double-quote quoted identifiers
+
+    public function testBacktickQuotedColumnInComparison(): void
+    {
+        $conditions = [$this->makeCondition("`First Name` = 'John'")];
+        $this->assertSame("First Name eq 'John'", OdataFilterBuilder::build($conditions));
+    }
+
+    public function testBacktickQuotedColumnIsNull(): void
+    {
+        $conditions = [$this->makeCondition('`Deleted At` IS NULL')];
+        $this->assertSame('Deleted At eq null', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testBacktickQuotedColumnIsNotNull(): void
+    {
+        $conditions = [$this->makeCondition('`Deleted At` IS NOT NULL')];
+        $this->assertSame('Deleted At ne null', OdataFilterBuilder::build($conditions));
+    }
+
+    public function testBacktickQuotedColumnLike(): void
+    {
+        $conditions = [$this->makeCondition("`Full Name` LIKE 'John%'")];
+        $this->assertSame("startswith(Full Name, 'John')", OdataFilterBuilder::build($conditions));
+    }
+
+    public function testBacktickQuotedColumnIn(): void
+    {
+        $conditions = [$this->makeCondition("`Status Code` IN (1, 2, 3)")];
+        $this->assertSame('(Status Code eq 1 or Status Code eq 2 or Status Code eq 3)', OdataFilterBuilder::build($conditions));
+    }
+
     // Date, datetime, and GUID filter values
 
     public function testDateValueIsUnquoted(): void
