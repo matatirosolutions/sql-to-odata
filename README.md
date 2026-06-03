@@ -34,17 +34,10 @@ Returns a `SelectQuery` with `entitySet` and `queryString` properties.
 use Matatirosoln\SqlToOdata\Query\SelectQuery;
 
 $query = $converter->parse("SELECT Id, Name FROM Users WHERE Status = 'Active' ORDER BY Name ASC LIMIT 10");
-// $query->entitySet  => 'Users'
+// $query->entitySet   => 'Users'
 // $query->queryString => '?$select=Id,Name&$filter=Status eq \'Active\'&$orderby=Name asc&$top=10'
 
 assert($query instanceof SelectQuery);
-```
-
-A `convert()` convenience method is also available for SELECT, returning the query string directly:
-
-```php
-$queryString = $converter->convert("SELECT Id, Name FROM Users WHERE Status = 'Active'");
-// '?$select=Id,Name&$filter=Status eq \'Active\''
 ```
 
 ### INSERT
@@ -146,7 +139,6 @@ match (true) {
 All errors throw `Matatirosoln\SqlToOdata\Exception\ConversionException`. Common cases:
 
 - Invalid or unparseable SQL
-- Non-SELECT statement passed to `convert()`
 - UPDATE or DELETE without a WHERE clause
 - Subqueries (not supported)
 - Unsupported statement types (e.g. `CREATE`, `DROP`)

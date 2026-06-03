@@ -65,10 +65,4 @@ class UpdateQueryTest extends TestCase
         $this->expectExceptionMessage('UPDATE without a WHERE clause is not supported.');
         $this->converter->parse("UPDATE Users SET Name = 'John'");
     }
-
-    public function testConvertThrowsForUpdate(): void
-    {
-        $this->expectException(ConversionException::class);
-        $this->converter->convert("UPDATE Users SET Name = 'John' WHERE Id = 1");
-    }
 }

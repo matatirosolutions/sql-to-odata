@@ -52,10 +52,4 @@ class InsertQueryTest extends TestCase
         $result = $this->converter->parse("INSERT INTO Users (Name, DeletedAt) VALUES ('John', NULL)");
         $this->assertSame(['Name' => 'John', 'DeletedAt' => null], $result->body);
     }
-
-    public function testConvertThrowsForInsert(): void
-    {
-        $this->expectException(ConversionException::class);
-        $this->converter->convert("INSERT INTO Users (Name) VALUES ('John')");
-    }
 }

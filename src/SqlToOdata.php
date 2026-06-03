@@ -9,7 +9,6 @@ use Matatirosoln\SqlToOdata\Parser\InsertParser;
 use Matatirosoln\SqlToOdata\Parser\SelectParser;
 use Matatirosoln\SqlToOdata\Parser\UpdateParser;
 use Matatirosoln\SqlToOdata\Query\Query;
-use Matatirosoln\SqlToOdata\Query\SelectQuery;
 use PhpMyAdmin\SqlParser\Parser;
 use PhpMyAdmin\SqlParser\Statements\DeleteStatement;
 use PhpMyAdmin\SqlParser\Statements\InsertStatement;
@@ -34,16 +33,5 @@ class SqlToOdata
             $statement instanceof DeleteStatement => new DeleteParser()->parse($statement),
             default => throw new ConversionException('Only SELECT, INSERT, UPDATE, and DELETE statements are supported.'),
         };
-    }
-
-    public function convert(string $sql): string
-    {
-        $query = $this->parse($sql);
-
-        if (!$query instanceof SelectQuery) {
-            throw new ConversionException('convert() only supports SELECT statements. Use parse() for INSERT and UPDATE.');
-        }
-
-        return $query->queryString;
     }
 }
