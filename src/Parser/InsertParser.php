@@ -18,20 +18,29 @@ class InsertParser
         }
 
         $columns = $statement->into->columns ?? [];
-        $raw     = $statement->values[0]->raw ?? [];
 
-        if (count($columns) !== count($raw)) {
-            throw new ConversionException('Column and value counts do not match.');
+        if (empty($columns)) {
+            throw new ConversionException('INSERT without a column list is not supported.');
         }
 
-        $body = [];
-        foreach ($columns as $index => $column) {
-            $body[$column] = ValueCaster::cast($raw[$index]);
+        $rows = [];
+        foreach ($statement->values as $valueRow) {
+            $raw = $valueRow->raw ?? [];
+
+            if (count($columns) !== count($raw)) {
+                throw new ConversionException('Column and value counts do not match.');
+            }
+
+            $body = [];
+            foreach ($columns as $index => $column) {
+                $body[$column] = ValueCaster::cast($raw[$index]);
+            }
+            $rows[] = $body;
         }
 
         return new InsertQuery(
             entitySet: trim($table, '`"\''),
-            body: $body,
+            rows: $rows,
         );
     }
 }

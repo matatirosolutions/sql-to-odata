@@ -6,11 +6,11 @@ namespace Matatirosoln\SqlToOdata\Query;
 class InsertQuery extends Query
 {
     /**
-     * @param array<string, mixed> $body Column-value pairs to POST.
+     * @param array<array<string, mixed>> $rows One or more rows of column-value pairs to POST.
      */
     public function __construct(
         string $entitySet,
-        public readonly array $body,
+        public readonly array $rows,
     ) {
         parent::__construct($entitySet);
     }
