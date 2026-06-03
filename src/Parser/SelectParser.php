@@ -6,10 +6,18 @@ namespace Matatirosoln\SqlToOdata\Parser;
 use Matatirosoln\SqlToOdata\Exception\ConversionException;
 use Matatirosoln\SqlToOdata\Support\OdataFilterBuilder;
 use Matatirosoln\SqlToOdata\Query\SelectQuery;
+use PhpMyAdmin\SqlParser\Components\Expression;
 use PhpMyAdmin\SqlParser\Statements\SelectStatement;
 
 class SelectParser
 {
+    private const array AGGREGATE_MAP = [
+        'MAX' => 'max',
+        'MIN' => 'min',
+        'SUM' => 'sum',
+        'AVG' => 'average',
+    ];
+
     public function parse(SelectStatement $statement): SelectQuery
     {
         if (in_array('DISTINCT', $statement->options->options ?? [], true)) {
@@ -32,7 +40,56 @@ class SelectParser
     private function isCountQuery(SelectStatement $statement): bool
     {
         return count($statement->expr) === 1
-            && strtoupper($statement->expr[0]->function ?? '') === 'COUNT';
+            && strtoupper($statement->expr[0]->function ?? '') === 'COUNT'
+            && empty($statement->group);
+    }
+
+    private function isAggregateQuery(SelectStatement $statement): bool
+    {
+        if (!empty($statement->group)) {
+            return true;
+        }
+
+        foreach ($statement->expr as $expr) {
+            if ($expr->function !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function buildAggregateClause(Expression $expr): string
+    {
+        $func  = strtoupper($expr->function ?? '');
+        $alias = $expr->alias;
+
+        if ($func === 'COUNT') {
+            return '$count as ' . ($alias ?? 'count');
+        }
+
+        preg_match('/\w+\((.+)\)/i', $expr->expr ?? '', $m);
+        $col      = $m[1] ?? $expr->expr;
+        $odataFunc = self::AGGREGATE_MAP[$func] ?? strtolower($func);
+        $alias    = $alias ?? ucfirst(strtolower($func)) . ucfirst($col);
+
+        return "$col with $odataFunc as $alias";
+    }
+
+    private function buildApplyString(SelectStatement $statement): string
+    {
+        $aggregates = array_filter($statement->expr, fn($e) => $e->function !== null);
+        $aggregateParts = array_map(fn($e) => $this->buildAggregateClause($e), $aggregates);
+
+        $aggregateStr = implode(',', $aggregateParts);
+
+        if (!empty($statement->group)) {
+            $groupCols = array_map(fn($g) => $g->expr->column, $statement->group);
+            $groupStr  = implode(',', $groupCols);
+            return "\$apply=groupby(($groupStr),aggregate($aggregateStr))";
+        }
+
+        return "\$apply=aggregate($aggregateStr)";
     }
 
     private function rejectSubqueries(SelectStatement $statement): void
@@ -64,6 +121,15 @@ class SelectParser
                 $params[] = '$filter=' . OdataFilterBuilder::build($statement->where);
             }
             return '/$count' . (empty($params) ? '' : '?' . implode('&', $params));
+        }
+
+        if ($this->isAggregateQuery($statement)) {
+            $params = [];
+            if ($statement->where !== null) {
+                $params[] = '$filter=' . OdataFilterBuilder::build($statement->where);
+            }
+            $params[] = $this->buildApplyString($statement);
+            return '?' . implode('&', $params);
         }
 
         $params = [];
