@@ -139,9 +139,10 @@ class OdataFilterBuilder
     private const string DATE_PATTERN     = '/^\d{4}-\d{2}-\d{2}$/';
     private const string DATETIME_PATTERN = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/';
 
-    private static function unquoteIdentifier(string $name): string
+    private static function formatIdentifier(string $name): string
     {
-        return preg_match(self::IDENTIFIER_PATTERN, trim($name), $m) ? $m[1] : trim($name);
+        $name = trim($name);
+        return preg_match(self::IDENTIFIER_PATTERN, $name, $m) ? '"' . $m[1] . '"' : $name;
     }
 
     /**
@@ -169,15 +170,15 @@ class OdataFilterBuilder
     private static function convertCondition(string $expr): string
     {
         if (preg_match('/^(.+?)\s+IS\s+NOT\s+NULL$/i', $expr, $m)) {
-            return self::unquoteIdentifier($m[1]) . ' ne null';
+            return self::formatIdentifier($m[1]) . ' ne null';
         }
 
         if (preg_match('/^(.+?)\s+IS\s+NULL$/i', $expr, $m)) {
-            return self::unquoteIdentifier($m[1]) . ' eq null';
+            return self::formatIdentifier($m[1]) . ' eq null';
         }
 
         if (preg_match("/^(.+?)\s+LIKE\s+'([^']*)'\s*$/i", $expr, $m)) {
-            $col     = self::unquoteIdentifier($m[1]);
+            $col     = self::formatIdentifier($m[1]);
             $pattern = $m[2];
 
             $leadingPct  = str_starts_with($pattern, '%');
@@ -204,7 +205,7 @@ class OdataFilterBuilder
         }
 
         if (preg_match('/^(.+?)\s+IN\s*\((.+)\)\s*$/i', $expr, $m)) {
-            $col    = self::unquoteIdentifier($m[1]);
+            $col    = self::formatIdentifier($m[1]);
             $values  = array_map(fn($v) => self::formatFilterValue(trim($v)), self::splitInValues($m[2]));
             $clauses = array_map(fn($v) => "$col eq $v", $values);
             return '(' . implode(' or ', $clauses) . ')';
@@ -222,7 +223,7 @@ class OdataFilterBuilder
             // Try to match each operator at this unquoted position
             foreach (self::OPERATOR_MAP as $sql => $odata) {
                 if (substr($expr, $i, strlen($sql)) === $sql) {
-                    $left  = self::unquoteIdentifier(substr($expr, 0, $i));
+                    $left  = self::formatIdentifier(substr($expr, 0, $i));
                     $right = self::formatFilterValue(trim(substr($expr, $i + strlen($sql))));
                     return $left . ' ' . $odata . ' ' . $right;
                 }
