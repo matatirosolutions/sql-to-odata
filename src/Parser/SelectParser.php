@@ -12,6 +12,10 @@ class SelectParser
 {
     public function parse(SelectStatement $statement): SelectQuery
     {
+        if (in_array('DISTINCT', $statement->options->options ?? [], true)) {
+            throw new ConversionException('SELECT DISTINCT is not supported; OData has no equivalent.');
+        }
+
         $this->rejectSubqueries($statement);
 
         $table = $statement->from[0]->table ?? null;
@@ -23,6 +27,12 @@ class SelectParser
             entitySet: trim($table, '`"\''),
             queryString: $this->buildQueryString($statement),
         );
+    }
+
+    private function isCountQuery(SelectStatement $statement): bool
+    {
+        return count($statement->expr) === 1
+            && strtoupper($statement->expr[0]->function ?? '') === 'COUNT';
     }
 
     private function rejectSubqueries(SelectStatement $statement): void
@@ -48,6 +58,14 @@ class SelectParser
 
     private function buildQueryString(SelectStatement $statement): string
     {
+        if ($this->isCountQuery($statement)) {
+            $params = [];
+            if ($statement->where !== null) {
+                $params[] = '$filter=' . OdataFilterBuilder::build($statement->where);
+            }
+            return '/$count' . (empty($params) ? '' : '?' . implode('&', $params));
+        }
+
         $params = [];
 
         if (!empty($statement->expr)) {

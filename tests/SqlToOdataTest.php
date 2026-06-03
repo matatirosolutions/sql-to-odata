@@ -68,6 +68,32 @@ class SqlToOdataTest extends TestCase
         $this->assertStringContainsString('$top=5', $result->queryString);
     }
 
+    public function testCountQuery(): void
+    {
+        $result = $this->converter->parse('SELECT COUNT(*) FROM Users');
+        $this->assertSame('Users', $result->entitySet);
+        $this->assertSame('/$count', $result->queryString);
+    }
+
+    public function testCountQueryWithWhere(): void
+    {
+        $result = $this->converter->parse("SELECT COUNT(*) FROM Users WHERE Status = 'Active'");
+        $this->assertSame('/$count?$filter=Status eq \'Active\'', $result->queryString);
+    }
+
+    public function testSchemaQualifiedTableName(): void
+    {
+        $result = $this->converter->parse('SELECT * FROM dbo.Users');
+        $this->assertSame('Users', $result->entitySet);
+    }
+
+    public function testSelectDistinctThrowsException(): void
+    {
+        $this->expectException(ConversionException::class);
+        $this->expectExceptionMessage('SELECT DISTINCT is not supported');
+        $this->converter->parse('SELECT DISTINCT Name FROM Users');
+    }
+
     public function testSubqueryInWhereThrowsException(): void
     {
         $this->expectException(ConversionException::class);
