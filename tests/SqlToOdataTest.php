@@ -65,6 +65,27 @@ class SqlToOdataTest extends TestCase
         $this->assertStringContainsString('$top=5', $result);
     }
 
+    public function testSubqueryInWhereThrowsException(): void
+    {
+        $this->expectException(ConversionException::class);
+        $this->expectExceptionMessage('Subqueries in WHERE are not supported.');
+        $this->converter->convert('SELECT * FROM Users WHERE Id IN (SELECT UserId FROM Orders)');
+    }
+
+    public function testSubqueryInFromThrowsException(): void
+    {
+        $this->expectException(ConversionException::class);
+        $this->expectExceptionMessage('Subqueries in FROM are not supported.');
+        $this->converter->convert('SELECT * FROM (SELECT * FROM Users) AS sub');
+    }
+
+    public function testSubqueryInSelectExpressionThrowsException(): void
+    {
+        $this->expectException(ConversionException::class);
+        $this->expectExceptionMessage('Subqueries in SELECT expressions are not supported.');
+        $this->converter->convert('SELECT (SELECT COUNT(*) FROM Orders) AS total FROM Users');
+    }
+
     public function testInvalidSqlThrowsException(): void
     {
         $this->expectException(ConversionException::class);

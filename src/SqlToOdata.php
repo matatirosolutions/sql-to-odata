@@ -22,6 +22,8 @@ class SqlToOdata
             throw new ConversionException('Only SELECT statements are supported.');
         }
 
+        $this->rejectSubqueries($statement);
+
         $table = $statement->from[0]->table ?? null;
         if ($table === null || $table === '') {
             throw new ConversionException('Could not determine entity set from SQL.');
@@ -36,6 +38,27 @@ class SqlToOdata
     public function convert(string $sql): string
     {
         return $this->parse($sql)->queryString;
+    }
+
+    private function rejectSubqueries(SelectStatement $statement): void
+    {
+        foreach ($statement->from as $from) {
+            if ($from->subquery !== null) {
+                throw new ConversionException('Subqueries in FROM are not supported.');
+            }
+        }
+
+        foreach ($statement->expr as $expr) {
+            if (stripos($expr->expr ?? '', 'SELECT') !== false) {
+                throw new ConversionException('Subqueries in SELECT expressions are not supported.');
+            }
+        }
+
+        foreach ($statement->where ?? [] as $condition) {
+            if (!$condition->isOperator && stripos($condition->expr, 'SELECT') !== false) {
+                throw new ConversionException('Subqueries in WHERE are not supported.');
+            }
+        }
     }
 
     private function buildOdataQuery(SelectStatement $statement): string
