@@ -6,7 +6,7 @@ namespace Matatirosoln\SqlToOdata\Query;
 class UpdateQuery extends Query
 {
     /**
-     * @param array<string, mixed> $body  Column-value pairs to PATCH.
+     * @param array<string, mixed> $body   Column-value pairs to PATCH.
      * @param string               $filter OData $filter expression derived from WHERE.
      */
     public function __construct(

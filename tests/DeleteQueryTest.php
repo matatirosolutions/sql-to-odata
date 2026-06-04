@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Matatirosoln\SqlToOdata\Tests;
@@ -29,8 +30,9 @@ class DeleteQueryTest extends TestCase
         $this->assertSame('Users', $result->entitySet);
     }
 
-    public function testSimpleFilter(): void
+    public function testIntegerWhereProducesFilter(): void
     {
+        // Library produces $filter; driver rewrites to key-path when it knows the PK.
         $result = $this->converter->parse('DELETE FROM Users WHERE Id = 1');
         $this->assertSame('Id eq 1', $result->filter);
     }

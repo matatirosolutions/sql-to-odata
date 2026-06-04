@@ -11,11 +11,16 @@ use PHPUnit\Framework\TestCase;
 
 class SqlToOdataTest extends TestCase
 {
+    /** Default converter — OData v4 spec-compliant (GUIDs unquoted). */
     private SqlToOdata $converter;
+
+    /** quoteGuids: true — for servers like FileMaker that need quoted GUIDs. */
+    private SqlToOdata $converterQuoteGuids;
 
     protected function setUp(): void
     {
-        $this->converter = new SqlToOdata();
+        $this->converter           = new SqlToOdata();
+        $this->converterQuoteGuids = new SqlToOdata(quoteGuids: true);
     }
 
     public function testSelectAllColumns(): void
@@ -60,7 +65,7 @@ class SqlToOdataTest extends TestCase
 
     public function testCombinedQuery(): void
     {
-        $sql = "SELECT Id, Name FROM Users WHERE Status = 'Active' ORDER BY Name ASC LIMIT 5";
+        $sql    = "SELECT Id, Name FROM Users WHERE Status = 'Active' ORDER BY Name ASC LIMIT 5";
         $result = $this->converter->parse($sql);
         $this->assertStringContainsString('$select=Id,Name', $result->queryString);
         $this->assertStringContainsString('$filter=', $result->queryString);
@@ -126,5 +131,151 @@ class SqlToOdataTest extends TestCase
         $this->expectException(ConversionException::class);
         $this->expectExceptionMessage('Only SELECT, INSERT, UPDATE, and DELETE statements are supported.');
         $this->converter->parse('CREATE TABLE Users (Id INT)');
+    }
+
+    // Doctrine-generated SQL: aliased tables (e.g. "FROM User t0")
+
+    public function testDoctrineAliasedTableIsResolvedAsEntitySet(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2, t0.City AS City_3 FROM User t0"
+        );
+        $this->assertInstanceOf(SelectQuery::class, $result);
+        $this->assertSame('User', $result->entitySet);
+    }
+
+    public function testDoctrineAliasedTableSelectColumns(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2, t0.City AS City_3 FROM User t0"
+        );
+        $this->assertSame('?$select=id,Name,City', $result->queryString);
+    }
+
+    public function testDoctrineAliasedTableWhereStripsAlias(): void
+    {
+        // The table alias prefix (t0.) must be stripped from WHERE expressions.
+        // UUID goes into $filter as a bare Edm.Guid literal (OData v4 default).
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2, t0.City AS City_3 FROM User t0 " .
+            "WHERE t0.id = '08EC1E80-89DB-4513-8E3D-9D33D6BA006C'"
+        );
+        $this->assertSame(
+            '?$select=id,Name,City&$filter=id eq 08EC1E80-89DB-4513-8E3D-9D33D6BA006C',
+            $result->queryString,
+        );
+    }
+
+    public function testDoctrineAliasedTableWhereStripsAliasQuoteGuids(): void
+    {
+        // With quoteGuids: true the UUID stays quoted — required by FileMaker.
+        $result = $this->converterQuoteGuids->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2, t0.City AS City_3 FROM User t0 " .
+            "WHERE t0.id = '08EC1E80-89DB-4513-8E3D-9D33D6BA006C'"
+        );
+        $this->assertSame(
+            '?$select=id,Name,City&$filter=id eq \'08EC1E80-89DB-4513-8E3D-9D33D6BA006C\'',
+            $result->queryString,
+        );
+    }
+
+    public function testDoctrineAliasedTableWhereWithStringValue(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2 FROM User t0 WHERE t0.Name = 'Alice'"
+        );
+        $this->assertStringContainsString('$filter=Name eq \'Alice\'', $result->queryString);
+    }
+
+    public function testDoctrineAliasedTableWhereCompoundCondition(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2 FROM User t0 " .
+            "WHERE t0.Name = 'Alice' AND t0.City = 'Auckland'"
+        );
+        $this->assertStringContainsString("Name eq 'Alice'", $result->queryString);
+        $this->assertStringContainsString("City eq 'Auckland'", $result->queryString);
+        $this->assertStringNotContainsString('t0.', $result->queryString);
+    }
+
+    // quoteGuids option
+
+    public function testGuidUnquotedByDefault(): void
+    {
+        $uuid   = '11111111-2222-3333-4444-555555555555';
+        $result = $this->converter->parse("SELECT * FROM Users WHERE OtherGuid = '$uuid'");
+        $this->assertStringContainsString("OtherGuid eq $uuid", $result->queryString);
+        $this->assertStringNotContainsString("'$uuid'", $result->queryString);
+    }
+
+    public function testGuidQuotedWhenConfigured(): void
+    {
+        $uuid   = '11111111-2222-3333-4444-555555555555';
+        $result = $this->converterQuoteGuids->parse("SELECT * FROM Users WHERE OtherGuid = '$uuid'");
+        $this->assertStringContainsString("OtherGuid eq '$uuid'", $result->queryString);
+    }
+
+    // Column metadata — field/alias pairs for result mapping
+
+    public function testColumnMetadataExtractedForAliasedColumns(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2, t0.City AS City_3 FROM User t0"
+        );
+        $this->assertSame(
+            [
+                ['field' => 'id',   'alias' => 'id_1'],
+                ['field' => 'Name', 'alias' => 'Name_2'],
+                ['field' => 'City', 'alias' => 'City_3'],
+            ],
+            $result->columns,
+        );
+    }
+
+    public function testColumnMetadataPreservesSelectOrder(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.City AS City_3, t0.Name AS Name_2, t0.id AS id_1 FROM User t0"
+        );
+        $this->assertSame('City', $result->columns[0]['field']);
+        $this->assertSame('Name', $result->columns[1]['field']);
+        $this->assertSame('id',   $result->columns[2]['field']);
+    }
+
+    public function testColumnMetadataEmptyForSelectStar(): void
+    {
+        $result = $this->converter->parse('SELECT * FROM Users');
+        $this->assertSame([], $result->columns);
+    }
+
+    public function testColumnMetadataEmptyForCountQuery(): void
+    {
+        $result = $this->converter->parse('SELECT COUNT(*) FROM Users');
+        $this->assertSame([], $result->columns);
+    }
+
+    public function testColumnMetadataUsesColumnNameWhenNoAlias(): void
+    {
+        $result = $this->converter->parse('SELECT id, Name FROM Users');
+        $this->assertSame([
+            ['field' => 'id',   'alias' => 'id'],
+            ['field' => 'Name', 'alias' => 'Name'],
+        ], $result->columns);
+    }
+
+    public function testColumnMetadataWithDoctrineWhereAndLimit(): void
+    {
+        $result = $this->converter->parse(
+            "SELECT t0.id AS id_1, t0.Name AS Name_2, t0.City AS City_3 FROM User t0 " .
+            "WHERE t0.Name = 'Alice' LIMIT 1"
+        );
+        $this->assertSame(
+            [
+                ['field' => 'id',   'alias' => 'id_1'],
+                ['field' => 'Name', 'alias' => 'Name_2'],
+                ['field' => 'City', 'alias' => 'City_3'],
+            ],
+            $result->columns,
+        );
     }
 }
