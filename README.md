@@ -1,8 +1,8 @@
 # MSDev SQL to OData
 
-> **Work in progress.** Additional features are planned.
-
 A PHP library for converting SQL queries to OData (Open Data Protocol) query syntax. Targets **OData 4.01** at the intermediate conformance level, primarily designed for use with the Claris FileMaker OData API (FileMaker Server 2025 / v22+).
+
+We would be very interested in hearing from potential users who have access to alternative OData implementations and may be interested in working to extend this library to ensure that it is broadly useful as possible. 
 
 ## Requirements
 
