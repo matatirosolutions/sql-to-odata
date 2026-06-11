@@ -8,8 +8,12 @@ use Matatirosoln\SqlToOdata\Support\OdataFilterBuilder;
 use Matatirosoln\SqlToOdata\Query\DeleteQuery;
 use PhpMyAdmin\SqlParser\Statements\DeleteStatement;
 
-class DeleteParser
+readonly class DeleteParser
 {
+    public function __construct(
+        private OdataFilterBuilder $filterBuilder
+    ) { }
+
     public function parse(DeleteStatement $statement): DeleteQuery
     {
         $table = $statement->from[0]->table ?? null;
@@ -23,7 +27,7 @@ class DeleteParser
 
         return new DeleteQuery(
             entitySet: trim($table, '`"\''),
-            filter: OdataFilterBuilder::build($statement->where),
+            filter: $this->filterBuilder->build($statement->where),
         );
     }
 }

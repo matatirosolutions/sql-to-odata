@@ -11,9 +11,21 @@ use PHPUnit\Framework\TestCase;
 
 class OdataFilterBuilderTest extends TestCase
 {
+    /** Default instance — OData v4 spec-compliant (GUIDs unquoted). */
+    private OdataFilterBuilder $builder;
+
+    /** quoteGuids: true — required by servers like FileMaker. */
+    private OdataFilterBuilder $builderQuoteGuids;
+
+    protected function setUp(): void
+    {
+        $this->builder           = new OdataFilterBuilder();
+        $this->builderQuoteGuids = new OdataFilterBuilder(quoteGuids: true);
+    }
+
     private function makeCondition(string $expr, bool $isOperator = false): Condition
     {
-        $condition = new Condition($expr);
+        $condition             = new Condition($expr);
         $condition->isOperator = $isOperator;
         return $condition;
     }
@@ -21,52 +33,43 @@ class OdataFilterBuilderTest extends TestCase
     public function testEqualsOperator(): void
     {
         $conditions = [$this->makeCondition("Status = 'Active'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("Status eq 'Active'", $result);
+        $this->assertSame("Status eq 'Active'", $this->builder->build($conditions));
     }
 
     public function testNotEqualsOperator(): void
     {
         $conditions = [$this->makeCondition('Age != 18')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('Age ne 18', $result);
+        $this->assertSame('Age ne 18', $this->builder->build($conditions));
     }
 
     public function testGreaterThanOperator(): void
     {
         $conditions = [$this->makeCondition('Age > 18')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('Age gt 18', $result);
+        $this->assertSame('Age gt 18', $this->builder->build($conditions));
     }
 
     public function testLessThanOrEqualOperator(): void
     {
         $conditions = [$this->makeCondition('Age <= 65')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('Age le 65', $result);
+        $this->assertSame('Age le 65', $this->builder->build($conditions));
     }
 
     public function testOperatorInsideSingleQuotedValue(): void
     {
-        // Old str_contains approach would match >= inside the string value
         $conditions = [$this->makeCondition("Tag = 'price>=0'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("Tag eq 'price>=0'", $result);
+        $this->assertSame("Tag eq 'price>=0'", $this->builder->build($conditions));
     }
 
     public function testOperatorInsideDoubleQuotedValue(): void
     {
         $conditions = [$this->makeCondition('Tag = "a<b"')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('Tag eq "a<b"', $result);
+        $this->assertSame('Tag eq "a<b"', $this->builder->build($conditions));
     }
 
     public function testSqlEscapedQuoteInValue(): void
     {
-        // SQL-style escaped single quote: '' inside a string literal
         $conditions = [$this->makeCondition("Name = 'O''Brien'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("Name eq 'O''Brien'", $result);
+        $this->assertSame("Name eq 'O''Brien'", $this->builder->build($conditions));
     }
 
     public function testAndOperator(): void
@@ -76,8 +79,7 @@ class OdataFilterBuilderTest extends TestCase
             $this->makeCondition('and', true),
             $this->makeCondition('Age > 18'),
         ];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("Status eq 'Active' and Age gt 18", $result);
+        $this->assertSame("Status eq 'Active' and Age gt 18", $this->builder->build($conditions));
     }
 
     // Backtick and double-quote quoted identifiers
@@ -85,71 +87,99 @@ class OdataFilterBuilderTest extends TestCase
     public function testBacktickQuotedColumnInComparison(): void
     {
         $conditions = [$this->makeCondition("`First Name` = 'John'")];
-        $this->assertSame('"First Name" eq \'John\'', OdataFilterBuilder::build($conditions));
+        $this->assertSame('"First Name" eq \'John\'', $this->builder->build($conditions));
     }
 
     public function testBacktickQuotedColumnIsNull(): void
     {
         $conditions = [$this->makeCondition('`Deleted At` IS NULL')];
-        $this->assertSame('"Deleted At" eq null', OdataFilterBuilder::build($conditions));
+        $this->assertSame('"Deleted At" eq null', $this->builder->build($conditions));
     }
 
     public function testBacktickQuotedColumnIsNotNull(): void
     {
         $conditions = [$this->makeCondition('`Deleted At` IS NOT NULL')];
-        $this->assertSame('"Deleted At" ne null', OdataFilterBuilder::build($conditions));
+        $this->assertSame('"Deleted At" ne null', $this->builder->build($conditions));
     }
 
     public function testBacktickQuotedColumnLike(): void
     {
         $conditions = [$this->makeCondition("`Full Name` LIKE 'John%'")];
-        $this->assertSame("startswith(\"Full Name\", 'John')", OdataFilterBuilder::build($conditions));
+        $this->assertSame("startswith(\"Full Name\", 'John')", $this->builder->build($conditions));
     }
 
     public function testBacktickQuotedColumnIn(): void
     {
         $conditions = [$this->makeCondition("`Status Code` IN (1, 2, 3)")];
-        $this->assertSame('("Status Code" eq 1 or "Status Code" eq 2 or "Status Code" eq 3)', OdataFilterBuilder::build($conditions));
+        $this->assertSame(
+            '("Status Code" eq 1 or "Status Code" eq 2 or "Status Code" eq 3)',
+            $this->builder->build($conditions),
+        );
     }
 
-    // Date, datetime, and GUID filter values
+    // Date and datetime values — always unquoted (typed literals in OData v4)
 
     public function testDateValueIsUnquoted(): void
     {
         $conditions = [$this->makeCondition("CreatedAt = '2024-01-15'")];
-        $this->assertSame('CreatedAt eq 2024-01-15', OdataFilterBuilder::build($conditions));
+        $this->assertSame('CreatedAt eq 2024-01-15', $this->builder->build($conditions));
     }
 
     public function testDatetimeValueIsUnquoted(): void
     {
         $conditions = [$this->makeCondition("CreatedAt = '2024-01-15T09:30:00Z'")];
-        $this->assertSame('CreatedAt eq 2024-01-15T09:30:00Z', OdataFilterBuilder::build($conditions));
+        $this->assertSame('CreatedAt eq 2024-01-15T09:30:00Z', $this->builder->build($conditions));
     }
 
     public function testDatetimeWithOffsetIsUnquoted(): void
     {
         $conditions = [$this->makeCondition("CreatedAt = '2024-01-15T09:30:00+12:00'")];
-        $this->assertSame('CreatedAt eq 2024-01-15T09:30:00+12:00', OdataFilterBuilder::build($conditions));
+        $this->assertSame('CreatedAt eq 2024-01-15T09:30:00+12:00', $this->builder->build($conditions));
     }
 
-    public function testGuidValueIsUnquoted(): void
+    public function testDateValueIsUnquotedWithQuoteGuids(): void
     {
+        // quoteGuids: true must not affect date/datetime handling
+        $conditions = [$this->makeCondition("CreatedAt = '2024-01-15'")];
+        $this->assertSame('CreatedAt eq 2024-01-15', $this->builderQuoteGuids->build($conditions));
+    }
+
+    // GUID filter values — spec vs FileMaker mode
+
+    public function testGuidValueIsUnquotedByDefault(): void
+    {
+        // OData v4 spec: Edm.Guid literals are bare (unquoted).
         $conditions = [$this->makeCondition("Id = '12345678-1234-1234-1234-123456789abc'")];
-        $this->assertSame('Id eq 12345678-1234-1234-1234-123456789abc', OdataFilterBuilder::build($conditions));
+        $this->assertSame('Id eq 12345678-1234-1234-1234-123456789abc', $this->builder->build($conditions));
+    }
+
+    public function testGuidValueRemainsQuotedWhenConfigured(): void
+    {
+        // quoteGuids: true keeps GUIDs as string literals for servers like FileMaker.
+        $conditions = [$this->makeCondition("Id = '12345678-1234-1234-1234-123456789abc'")];
+        $this->assertSame("Id eq '12345678-1234-1234-1234-123456789abc'", $this->builderQuoteGuids->build($conditions));
+    }
+
+    public function testGuidInInListUnquotedByDefault(): void
+    {
+        $a          = '11111111-1111-1111-1111-111111111111';
+        $b          = '22222222-2222-2222-2222-222222222222';
+        $conditions = [$this->makeCondition("Id IN ('$a', '$b')")];
+        $this->assertSame("(Id eq $a or Id eq $b)", $this->builder->build($conditions));
+    }
+
+    public function testGuidInInListQuotedWhenConfigured(): void
+    {
+        $a          = '11111111-1111-1111-1111-111111111111';
+        $b          = '22222222-2222-2222-2222-222222222222';
+        $conditions = [$this->makeCondition("Id IN ('$a', '$b')")];
+        $this->assertSame("(Id eq '$a' or Id eq '$b')", $this->builderQuoteGuids->build($conditions));
     }
 
     public function testPlainStringValueRemainsQuoted(): void
     {
         $conditions = [$this->makeCondition("Status = 'Active'")];
-        $this->assertSame("Status eq 'Active'", OdataFilterBuilder::build($conditions));
-    }
-
-    public function testGuidInInList(): void
-    {
-        $a = '11111111-1111-1111-1111-111111111111';
-        $b = '22222222-2222-2222-2222-222222222222';
-        $conditions = [$this->makeCondition("Id IN ('$a', '$b')")];
-        $this->assertSame("(Id eq $a or Id eq $b)", OdataFilterBuilder::build($conditions));
+        $this->assertSame("Status eq 'Active'", $this->builder->build($conditions));
     }
 
     // AND/OR precedence
@@ -163,7 +193,7 @@ class OdataFilterBuilderTest extends TestCase
             $this->makeCondition('and', true),
             $this->makeCondition('c = 3'),
         ];
-        $this->assertSame('a eq 1 and b eq 2 and c eq 3', OdataFilterBuilder::build($conditions));
+        $this->assertSame('a eq 1 and b eq 2 and c eq 3', $this->builder->build($conditions));
     }
 
     public function testPureOrNeedsNoParens(): void
@@ -175,12 +205,11 @@ class OdataFilterBuilderTest extends TestCase
             $this->makeCondition('or', true),
             $this->makeCondition('c = 3'),
         ];
-        $this->assertSame('a eq 1 or b eq 2 or c eq 3', OdataFilterBuilder::build($conditions));
+        $this->assertSame('a eq 1 or b eq 2 or c eq 3', $this->builder->build($conditions));
     }
 
     public function testAndGroupWrappedWhenOrPresent(): void
     {
-        // SQL: a = 1 OR b = 2 AND c = 3  →  AND binds tighter
         $conditions = [
             $this->makeCondition('a = 1'),
             $this->makeCondition('or', true),
@@ -188,12 +217,11 @@ class OdataFilterBuilderTest extends TestCase
             $this->makeCondition('and', true),
             $this->makeCondition('c = 3'),
         ];
-        $this->assertSame('a eq 1 or (b eq 2 and c eq 3)', OdataFilterBuilder::build($conditions));
+        $this->assertSame('a eq 1 or (b eq 2 and c eq 3)', $this->builder->build($conditions));
     }
 
     public function testMultipleAndGroupsSeparatedByOr(): void
     {
-        // SQL: a = 1 AND b = 2 OR c = 3 AND d = 4
         $conditions = [
             $this->makeCondition('a = 1'),
             $this->makeCondition('and', true),
@@ -203,7 +231,7 @@ class OdataFilterBuilderTest extends TestCase
             $this->makeCondition('and', true),
             $this->makeCondition('d = 4'),
         ];
-        $this->assertSame('(a eq 1 and b eq 2) or (c eq 3 and d eq 4)', OdataFilterBuilder::build($conditions));
+        $this->assertSame('(a eq 1 and b eq 2) or (c eq 3 and d eq 4)', $this->builder->build($conditions));
     }
 
     // IS NULL / IS NOT NULL
@@ -211,15 +239,13 @@ class OdataFilterBuilderTest extends TestCase
     public function testIsNull(): void
     {
         $conditions = [$this->makeCondition('DeletedAt IS NULL')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('DeletedAt eq null', $result);
+        $this->assertSame('DeletedAt eq null', $this->builder->build($conditions));
     }
 
     public function testIsNotNull(): void
     {
         $conditions = [$this->makeCondition('DeletedAt IS NOT NULL')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('DeletedAt ne null', $result);
+        $this->assertSame('DeletedAt ne null', $this->builder->build($conditions));
     }
 
     // LIKE
@@ -227,43 +253,39 @@ class OdataFilterBuilderTest extends TestCase
     public function testLikeContains(): void
     {
         $conditions = [$this->makeCondition("Name LIKE '%foo%'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("contains(Name, 'foo')", $result);
+        $this->assertSame("contains(Name, 'foo')", $this->builder->build($conditions));
     }
 
     public function testLikeStartsWith(): void
     {
         $conditions = [$this->makeCondition("Name LIKE 'foo%'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("startswith(Name, 'foo')", $result);
+        $this->assertSame("startswith(Name, 'foo')", $this->builder->build($conditions));
     }
 
     public function testLikeEndsWith(): void
     {
         $conditions = [$this->makeCondition("Name LIKE '%foo'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("endswith(Name, 'foo')", $result);
+        $this->assertSame("endswith(Name, 'foo')", $this->builder->build($conditions));
     }
 
     public function testLikeInteriorWildcardThrows(): void
     {
         $this->expectException(ConversionException::class);
         $this->expectExceptionMessage('interior wildcards');
-        OdataFilterBuilder::build([$this->makeCondition("Name LIKE '%foo%bar%'")]);
+        $this->builder->build([$this->makeCondition("Name LIKE '%foo%bar%'")]);
     }
 
     public function testLikeSingleCharWildcardThrows(): void
     {
         $this->expectException(ConversionException::class);
         $this->expectExceptionMessage('interior wildcards');
-        OdataFilterBuilder::build([$this->makeCondition("Name LIKE 'foo_bar'")]);
+        $this->builder->build([$this->makeCondition("Name LIKE 'foo_bar'")]);
     }
 
     public function testLikeExactMatch(): void
     {
         $conditions = [$this->makeCondition("Name LIKE 'foo'")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("Name eq 'foo'", $result);
+        $this->assertSame("Name eq 'foo'", $this->builder->build($conditions));
     }
 
     // IN
@@ -271,22 +293,18 @@ class OdataFilterBuilderTest extends TestCase
     public function testInWithStrings(): void
     {
         $conditions = [$this->makeCondition("Status IN ('Active', 'Pending')")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("(Status eq 'Active' or Status eq 'Pending')", $result);
+        $this->assertSame("(Status eq 'Active' or Status eq 'Pending')", $this->builder->build($conditions));
     }
 
     public function testInWithIntegers(): void
     {
         $conditions = [$this->makeCondition('Age IN (18, 21, 65)')];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame('(Age eq 18 or Age eq 21 or Age eq 65)', $result);
+        $this->assertSame('(Age eq 18 or Age eq 21 or Age eq 65)', $this->builder->build($conditions));
     }
 
     public function testInWithCommaInsideValue(): void
     {
-        // Comma inside a quoted string must not split the value
         $conditions = [$this->makeCondition("Tag IN ('a,b', 'c')")];
-        $result = OdataFilterBuilder::build($conditions);
-        $this->assertSame("(Tag eq 'a,b' or Tag eq 'c')", $result);
+        $this->assertSame("(Tag eq 'a,b' or Tag eq 'c')", $this->builder->build($conditions));
     }
 }

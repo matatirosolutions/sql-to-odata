@@ -19,6 +19,10 @@ class SelectParser
         'AVG' => 'average',
     ];
 
+    public function __construct(
+        private readonly OdataFilterBuilder $filterBuilder
+    ) { }
+
     public function parse(SelectStatement $statement): SelectQuery
     {
         if (in_array('DISTINCT', $statement->options->options ?? [], true)) {
@@ -27,14 +31,29 @@ class SelectParser
 
         $this->rejectSubqueries($statement);
 
-        $table = $statement->from[0]->table ?? null;
+        $from  = $statement->from[0];
+        // When a table alias is present the SQL parser puts the real name in
+        // ->expr and leaves ->table null; fall back accordingly.
+        $table = ($from->table !== null && $from->table !== '')
+            ? $from->table
+            : ($from->expr ?? null);
+
         if ($table === null || $table === '') {
             throw new ConversionException('Could not determine entity set from SQL.');
         }
 
+        // Collect all table aliases so we can strip them from WHERE expressions.
+        $aliases = [];
+        foreach ($statement->from as $fromItem) {
+            if ($fromItem->alias !== null && $fromItem->alias !== '') {
+                $aliases[] = $fromItem->alias;
+            }
+        }
+
         return new SelectQuery(
             entitySet: trim($table, '`"\''),
-            queryString: $this->buildQueryString($statement),
+            queryString: $this->buildQueryString($statement, $aliases),
+            columns: $this->extractColumns($statement),
         );
     }
 
@@ -70,19 +89,18 @@ class SelectParser
         }
 
         preg_match('/\w+\((.+)\)/i', $expr->expr ?? '', $m);
-        $col      = $m[1] ?? $expr->expr;
+        $col       = $m[1] ?? $expr->expr;
         $odataFunc = self::AGGREGATE_MAP[$func] ?? strtolower($func);
-        $alias    = $alias ?? ucfirst(strtolower($func)) . ucfirst($col);
+        $alias     = $alias ?? ucfirst(strtolower($func)) . ucfirst($col);
 
         return "$col with $odataFunc as $alias";
     }
 
     private function buildApplyString(SelectStatement $statement): string
     {
-        $aggregates = array_filter($statement->expr, fn($e) => $e->function !== null);
+        $aggregates     = array_filter($statement->expr, fn($e) => $e->function !== null);
         $aggregateParts = array_map(fn($e) => $this->buildAggregateClause($e), $aggregates);
-
-        $aggregateStr = implode(',', $aggregateParts);
+        $aggregateStr   = implode(',', $aggregateParts);
 
         if (!empty($statement->group)) {
             $groupCols = array_map(fn($g) => $g->expr->column, $statement->group);
@@ -114,12 +132,13 @@ class SelectParser
         }
     }
 
-    private function buildQueryString(SelectStatement $statement): string
+    /** @param string[] $aliases Table aliases to strip from WHERE/ORDER expressions. */
+    private function buildQueryString(SelectStatement $statement, array $aliases = []): string
     {
         if ($this->isCountQuery($statement)) {
             $params = [];
             if ($statement->where !== null) {
-                $params[] = '$filter=' . OdataFilterBuilder::build($statement->where);
+                $params[] = '$filter=' . $this->filterBuilder->build($this->stripAliases($statement->where, $aliases));
             }
             return '/$count' . (empty($params) ? '' : '?' . implode('&', $params));
         }
@@ -127,7 +146,7 @@ class SelectParser
         if ($this->isAggregateQuery($statement)) {
             $params = [];
             if ($statement->where !== null) {
-                $params[] = '$filter=' . OdataFilterBuilder::build($statement->where);
+                $params[] = '$filter=' . $this->filterBuilder->build($this->stripAliases($statement->where, $aliases));
             }
             $params[] = $this->buildApplyString($statement);
             return '?' . implode('&', $params);
@@ -168,7 +187,7 @@ class SelectParser
         }
 
         if ($statement->where !== null) {
-            $params[] = '$filter=' . OdataFilterBuilder::build($statement->where);
+            $params[] = '$filter=' . $this->filterBuilder->build($this->stripAliases($statement->where, $aliases));
         }
 
         if (!empty($statement->order)) {
@@ -188,5 +207,58 @@ class SelectParser
         }
 
         return '?' . implode('&', $params);
+    }
+
+    /**
+     * Extracts an ordered column map from the SELECT expressions.
+     *
+     * Returns a list of {field, alias} pairs — one per concrete column —
+     * in the same order they appear in the SELECT clause. This lets the DBAL
+     * result layer return values in the correct positional order and with the
+     * SQL alias names that Doctrine (or other consumers) expect.
+     *
+     * @return list<array{field: string, alias: string}>
+     */
+    private function extractColumns(SelectStatement $statement): array
+    {
+        if ($this->isCountQuery($statement) || $this->isAggregateQuery($statement)) {
+            return [];
+        }
+
+        $columns = [];
+
+        foreach ($statement->expr as $expr) {
+            $field = $expr->column ?? null;
+
+            if ($field === null || $field === '' || $field === '*' || $expr->function !== null) {
+                continue;
+            }
+
+            $alias     = ($expr->alias !== null && $expr->alias !== '') ? $expr->alias : $field;
+            $columns[] = ['field' => trim($field, '`"\''), 'alias' => $alias];
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Strips table alias prefixes (e.g. "t0.") from WHERE condition expressions.
+     *
+     * @param  \PhpMyAdmin\SqlParser\Components\Condition[] $conditions
+     * @return \PhpMyAdmin\SqlParser\Components\Condition[]
+     */
+    private function stripAliases(array $conditions, array $aliases): array
+    {
+        if (empty($aliases)) {
+            return $conditions;
+        }
+
+        $pattern = '/\b(' . implode('|', array_map('preg_quote', $aliases)) . ')\./i';
+
+        return array_map(function ($condition) use ($pattern) {
+            $clone       = clone $condition;
+            $clone->expr = preg_replace($pattern, '', $clone->expr);
+            return $clone;
+        }, $conditions);
     }
 }

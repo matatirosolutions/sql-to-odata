@@ -9,8 +9,12 @@ use Matatirosoln\SqlToOdata\Query\UpdateQuery;
 use Matatirosoln\SqlToOdata\Support\ValueCaster;
 use PhpMyAdmin\SqlParser\Statements\UpdateStatement;
 
-class UpdateParser
+readonly class UpdateParser
 {
+    public function __construct(
+        private OdataFilterBuilder $filterBuilder
+    ) { }
+
     public function parse(UpdateStatement $statement): UpdateQuery
     {
         $table = $statement->tables[0]->table ?? null;
@@ -30,7 +34,7 @@ class UpdateParser
         return new UpdateQuery(
             entitySet: trim($table, '`"\''),
             body: $body,
-            filter: OdataFilterBuilder::build($statement->where),
+            filter: $this->filterBuilder->build($statement->where),
         );
     }
 }

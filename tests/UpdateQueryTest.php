@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Matatirosoln\SqlToOdata\Tests;
@@ -47,10 +48,28 @@ class UpdateQueryTest extends TestCase
         $this->assertSame(['Name' => 'John', 'Status' => 'Active'], $result->body);
     }
 
-    public function testSimpleFilter(): void
+    public function testIntegerWhereProducesFilter(): void
     {
+        // Single integer equality: library produces $filter; driver is responsible
+        // for rewriting to a key-path URL when it knows the field is the PK.
         $result = $this->converter->parse("UPDATE Users SET Name = 'John' WHERE Id = 1");
         $this->assertSame('Id eq 1', $result->filter);
+    }
+
+    public function testUuidWhereProducesUnquotedFilter(): void
+    {
+        // UUID: unquoted by default (OData v4 Edm.Guid literal).
+        $uuid   = '08EC1E80-89DB-4513-8E3D-9D33D6BA006C';
+        $result = $this->converter->parse("UPDATE Users SET Name = 'John' WHERE Id = '$uuid'");
+        $this->assertSame("Id eq $uuid", $result->filter);
+    }
+
+    public function testUuidWhereProducesQuotedFilterWhenConfigured(): void
+    {
+        $uuid      = '08EC1E80-89DB-4513-8E3D-9D33D6BA006C';
+        $converter = new SqlToOdata(quoteGuids: true);
+        $result    = $converter->parse("UPDATE Users SET Name = 'John' WHERE Id = '$uuid'");
+        $this->assertSame("Id eq '$uuid'", $result->filter);
     }
 
     public function testCompoundFilter(): void
