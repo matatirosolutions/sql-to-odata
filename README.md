@@ -1,6 +1,6 @@
 # MSDev SQL to OData
 
-> **Work in progress.** Additional features are planned.
+> **Work in progress.** Further features are planned.
 
 A PHP library for converting SQL queries to OData (Open Data Protocol) query syntax. Targets **OData 4.01** at the intermediate conformance level, primarily designed for use with the Claris FileMaker OData API (FileMaker Server 2025 / v22+).
 
@@ -113,10 +113,34 @@ match (true) {
 |-----|-------|
 | `SELECT col1, col2` | `$select=col1,col2` |
 | `SELECT *` | *(omitted — returns all fields)* |
+| `JOIN` / `LEFT JOIN` | `$expand` |
 | `WHERE` | `$filter` |
 | `ORDER BY` | `$orderby` |
 | `LIMIT n` | `$top=n` |
 | `LIMIT n OFFSET m` | `$top=n&$skip=m` |
+
+#### JOIN → $expand
+
+SQL JOINs are translated to OData `$expand`, which follows navigation properties defined in the OData service metadata. Columns selected from a joined table are promoted into a nested `$select` within the expand:
+
+```php
+$query = $converter->parse(
+    'SELECT Users.Id, Users.Name, Orders.OrderDate FROM Users JOIN Orders ON Users.Id = Orders.UserId'
+);
+// $query->entitySet   => 'Users'
+// $query->queryString => '?$select=Id,Name&$expand=Orders($select=OrderDate)'
+```
+
+Multiple JOINs produce a comma-separated `$expand`:
+
+```php
+$query = $converter->parse(
+    'SELECT * FROM Users JOIN Orders ON Users.Id = Orders.UserId JOIN Addresses ON Users.Id = Addresses.UserId'
+);
+// $query->queryString => '?$expand=Orders,Addresses'
+```
+
+> **Note:** Unlike SQL, OData `$expand` is constrained to navigation properties defined in the service metadata — arbitrary cross-entity joins are not supported by the OData protocol itself.
 
 ### WHERE operators
 

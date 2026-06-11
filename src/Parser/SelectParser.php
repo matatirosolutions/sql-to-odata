@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Matatirosoln\SqlToOdata\Parser;
 
 use Matatirosoln\SqlToOdata\Exception\ConversionException;
+use Matatirosoln\SqlToOdata\Support\OdataExpandBuilder;
 use Matatirosoln\SqlToOdata\Support\OdataFilterBuilder;
 use Matatirosoln\SqlToOdata\Query\SelectQuery;
 use PhpMyAdmin\SqlParser\Components\Expression;
@@ -134,12 +135,36 @@ class SelectParser
 
         $params = [];
 
+        // Collect joined table names/aliases so we can route their columns to $expand
+        $joinedTables = [];
+        foreach ($statement->join ?? [] as $join) {
+            $joinedTables[] = $join->expr->table;
+            if ($join->expr->alias !== null) {
+                $joinedTables[] = $join->expr->alias;
+            }
+        }
+
+        // $select — exclude columns that belong to a joined table
         if (!empty($statement->expr)) {
-            $columns = array_map(fn($expr) => $expr->column ?? '*', $statement->expr);
-            $columns = array_filter($columns, fn($col) => $col !== '*');
+            $columns = [];
+            foreach ($statement->expr as $expr) {
+                $qualifier = $expr->table ?? '';
+                if ($qualifier !== '' && in_array($qualifier, $joinedTables, true)) {
+                    continue;
+                }
+                $col = $expr->column ?? null;
+                if ($col !== null && $col !== '*') {
+                    $columns[] = $col;
+                }
+            }
             if (!empty($columns)) {
                 $params[] = '$select=' . implode(',', $columns);
             }
+        }
+
+        // $expand (JOIN)
+        if (!empty($statement->join)) {
+            $params[] = '$expand=' . OdataExpandBuilder::build($statement->join, $statement->expr);
         }
 
         if ($statement->where !== null) {
