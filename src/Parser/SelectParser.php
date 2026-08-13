@@ -177,8 +177,15 @@ class SelectParser
                 }
             }
             if (!empty($columns)) {
-                $encoded  = array_map(static fn(string $c) => str_replace('~', '%7E', $c), $columns);
-                $params[] = '$select=' . implode(',', $encoded);
+                // FileMaker treats ~ as a bitwise NOT operator in $select, making
+                // ~-prefixed field names unresolvable regardless of encoding. When
+                // any selected column carries a ~ prefix, omit $select entirely so
+                // FileMaker returns all fields; ODataResult maps only the columns
+                // it needs, so no data is lost.
+                $hasTildeColumn = (bool) array_filter($columns, static fn(string $c) => str_starts_with($c, '~'));
+                if (!$hasTildeColumn) {
+                    $params[] = '$select=' . implode(',', $columns);
+                }
             }
         }
 
