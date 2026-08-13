@@ -177,7 +177,8 @@ class SelectParser
                 }
             }
             if (!empty($columns)) {
-                $params[] = '$select=' . implode(',', $columns);
+                $encoded  = array_map(static fn(string $c) => str_replace('~', '%7E', $c), $columns);
+                $params[] = '$select=' . implode(',', $encoded);
             }
         }
 
