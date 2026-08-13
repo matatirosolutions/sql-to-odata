@@ -28,7 +28,7 @@ readonly class UpdateParser
 
         $body = [];
         foreach ($statement->set as $assignment) {
-            $body[$assignment->column] = ValueCaster::cast($assignment->value);
+            $body[trim($assignment->column, '`"\'')] = ValueCaster::cast($assignment->value);
         }
 
         return new UpdateQuery(

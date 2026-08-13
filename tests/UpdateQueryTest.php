@@ -78,6 +78,21 @@ class UpdateQueryTest extends TestCase
         $this->assertSame("Status eq 'Active' and Role eq 'admin'", $result->filter);
     }
 
+    public function testDoubleQuotedColumnNameIsStripped(): void
+    {
+        // Doctrine generates ANSI double-quote quoting for columns declared with
+        // backtick hints, e.g. @ORM\Column(name: "`~flag`") → "~flag" in SQL.
+        // The body key must be the bare field name, not the quoted identifier.
+        $result = $this->converter->parse('UPDATE Items SET "~status_flag" = 0 WHERE Id = 1');
+        $this->assertSame(['~status_flag' => 0], $result->body);
+    }
+
+    public function testBacktickQuotedColumnNameIsStripped(): void
+    {
+        $result = $this->converter->parse("UPDATE Items SET `~status_flag` = 0 WHERE Id = 1");
+        $this->assertSame(['~status_flag' => 0], $result->body);
+    }
+
     public function testMissingWhereThrowsException(): void
     {
         $this->expectException(ConversionException::class);
